@@ -1,45 +1,162 @@
 <template>
-  <section class="entry-title d-flex justify-content-between p-2">
-    <div>
-      <span class="text-success fs-3 fw-bold">15</span>
-      <span class="mx-1 fs-3">Julio</span>
-      <span class="mx-2 fs-4 fw-light">2021, Jueves</span>
-    </div>
+  <template v-if="entry">
+    <section class="entry-title d-flex justify-content-between p-2">
+      <div>
+        <span class="text-success fs-3 fw-bold">{{ day }}</span>
+        <span class="mx-1 fs-3">{{ month }}</span>
+        <span class="mx-2 fs-4 fw-light">{{ yearDay }}</span>
+      </div>
 
-    <div>
-      <button class="btn btn-danger mx-2">
-        Borrar
-        <i class="fa fa-trash-alt"></i>
-      </button>
+      <div>
+        <input
+          type="file"
+          @change="onSelectedImage"
+          ref="imageSelector"
+          v-show="false"
+          accept="image/png, image/jpeg"
+        />
+        <button class="btn btn-danger mx-2" @click="onDeleteEntry" v-if="entry.id">
+          Borrar
+          <i class="fa fa-trash-alt"></i>
+        </button>
 
-      <button class="btn btn-primary ">
-        Subir foto
-        <i class="fa fa-upload"></i>
-      </button>
-    </div>
-  </section>
+        <button class="btn btn-primary" @click="onSelectImage">
+          Subir foto
+          <i class="fa fa-upload"></i>
+        </button>
+      </div>
+    </section>
 
-  <hr />
+    <hr />
 
-  <section class="d-flex flex-column px-3 h-75">
-    <textarea placeholder="¿Qué sucedio hoy?"></textarea>
-  </section>
+    <section class="d-flex flex-column px-3 h-75">
+      <textarea v-model="entry.text" placeholder="¿Qué sucedio hoy?"></textarea>
+    </section>
 
-  <img
-    src="https://estaticos.muyinteresante.es/media/cache/760x570_thumb/uploads/images/pyr/5cd405db5cafe829df48e212/funimation-1.jpg"
-    alt="entry-picture"
-    class="img-thumbnail"
-  />
+    <img v-if="entry.picture && !localImage" :src="entry.picture" alt="entry-picture" class="img-thumbnail" />
+    <img v-if="localImage" :src="localImage" alt="entry-picture" class="img-thumbnail" />
+  </template>
 
-  <Fab icon="fa-save" />
+  <Fab icon="fa-save" @on:click="saveEntry" />
 </template>
 
 <script>
 import { defineAsyncComponent } from '@vue/runtime-core'
+import { mapGetters, mapActions } from 'vuex'
+import Swal from 'sweetalert2'
+
+import getDayMonthYear from '../helpers/getDayMonthYear'
+import uploadImage from '../helpers/uploadImage'
 
 export default {
+  props: {
+    id: {
+      type: String,
+      required: true
+    }
+  },
   components: {
     Fab: defineAsyncComponent(() => import('../components/Fab'))
+  },
+  methods: {
+    ...mapActions('daybook', ['updateEntry', 'createEntry', 'deleteEntry']),
+    loadEntry() {
+      let entry
+
+      if (this.id === 'new') {
+        entry = {
+          text: '',
+          date: new Date().getTime()
+        }
+      } else {
+        entry = this.getEntryById(this.id)
+        if (!entry) return this.$router.push({ name: 'no-entry' })
+      }
+
+      this.entry = entry
+      this.date = getDayMonthYear(this.entry.date)
+    },
+    async saveEntry() {
+      new Swal({
+        title: 'Espere por favor',
+        allowOutsideClick: false
+      })
+      Swal.showLoading()
+
+      const picture = await uploadImage(this.file)
+      this.entry.picture = picture
+
+      if (this.entry.id) {
+        await this.updateEntry(this.entry)
+      } else {
+        const id = await this.createEntry(this.entry)
+        this.$router.push({ name: 'entry', params: { id } })
+      }
+      this.file = null
+      Swal.fire('Guardado', 'Entrada registrada con éxito', 'success')
+    },
+    async onDeleteEntry() {
+      const { isConfirmed } = await Swal.fire({
+        title: '¿Está seguro?',
+        text: 'Una vez borrado no se puede recuperar',
+        showDenyButton: true,
+        confirmButtonText: 'Si, Estoy seguro'
+      })
+
+      if (isConfirmed) {
+        new Swal({
+          title: 'Espere por favor',
+          allowOutsideClick: false
+        })
+        Swal.showLoading()
+        await this.deleteEntry(this.entry.id)
+        this.$router.push({ name: 'no-entry' })
+        Swal.fire('Eliminado', '', 'success')
+      }
+    },
+    onSelectedImage(event) {
+      const file = event.target.files[0]
+      if (!file) {
+        this.localImage = null
+        this.file = null
+        return
+      }
+
+      this.file = file
+      const fr = new FileReader()
+      fr.onload = () => (this.localImage = fr.result)
+      fr.readAsDataURL(file)
+    },
+    onSelectImage() {
+      this.$refs.imageSelector.click()
+    }
+  },
+  data() {
+    return {
+      entry: null,
+      localImage: null,
+      file: null
+    }
+  },
+  computed: {
+    ...mapGetters('daybook', ['getEntryById']),
+    day() {
+      return this.date.day
+    },
+    month() {
+      return this.date.month
+    },
+    yearDay() {
+      return this.date.yearDate
+    }
+  },
+  created() {
+    this.loadEntry()
+  },
+  watch: {
+    id() {
+      this.loadEntry()
+    }
   }
 }
 </script>

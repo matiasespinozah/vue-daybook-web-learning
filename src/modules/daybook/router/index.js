@@ -10,7 +10,10 @@ export default {
     {
       path: ':id',
       name: 'entry',
-      component: () => import(/* webpackChunkName: "daybook_entry" */ '@/modules/daybook/views/EntryView')
+      component: () => import(/* webpackChunkName: "daybook_entry" */ '@/modules/daybook/views/EntryView'),
+      props: route => ({
+        id: route.params.id
+      })
     }
   ]
 }
